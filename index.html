@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SE2 Blueprint 3D Viewer</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    html, body { height: 100%; margin: 0; background: #000; color: #ddd; font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif; }
+    #ui { position: fixed; top: 10px; left: 10px; z-index: 10; background: rgba(20,20,20,0.85); backdrop-filter: blur(4px); border: 1px solid #333; border-radius: 10px; padding: 10px 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.4); max-width: 720px; }
+    #ui h1 { font-size: 14px; margin: 0 0 8px; color: #fff; }
+    #ui label { font-size: 12px; opacity: 0.9; }
+    #ui .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
+    #ui input[type="number"], #ui select, #ui input[type="color"] { width: 95px; background: #111; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 4px 6px; }
+    #ui input[type="checkbox"] { transform: translateY(1px); }
+    #ui button { background: #1f2937; color: #fff; border: 1px solid #374151; border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+    #ui button:hover { background: #273245; }
+    #stats { font-size: 12px; color: #bbb; margin-top: 6px; line-height: 1.4; max-width: 700px; }
+    #dropzone { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; border: 2px dashed #3b82f6; color: #93c5fd; background: rgba(30,58,138,0.15); pointer-events: none; font-size: 18px; }
+    canvas { display:block; }
+    .sep { width:1px; height:16px; background:#444; margin:0 6px; }
+    .small { font-size: 11px; opacity: .9; }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1>SE2 Blueprint 3D Viewer</h1>
+    <div class="row">
+      <input type="file" id="fileInput" accept=".json" />
+      <button id="demoBtnA" title="Load Sample A (HSV colors)">Sample A</button>
+      <button id="demoBtnB" title="Load Sample B (HSV ramp)">Sample B</button>
+      <button id="demoBtnC" title="Load Sample C (size auto-detect)">Sample C</button>
+      <button id="demoBtnD" title="Load Sample D (selection)">Sample D</button>
+      <button id="demoBtnE" title="Load Sample E (cylindrical + noise)">Sample E</button>
+      <span class="sep"></span>
+      <button id="fitBtn">Fit view</button>
+      <button id="resetBtn">Reset cam</button>
+      <button id="exportBtn" title="Export current JSON with edited colors">Export JSON</button>
+    </div>
+
+    <div class="row">
+      <label>Default size</label>
+      <input id="sizeInput" type="number" step="0.01" min="0.05" value="2.49" title="Used when auto-size fails; also used if Auto sizes is off" />
+      <label><input id="autosizeToggle" type="checkbox" checked /> Auto sizes</label>
+      <label><input id="shadowsToggle" type="checkbox" checked /> Shadows</label>
+      <label><input id="starsToggle" type="checkbox" checked /> Stars</label>
+      <label><input id="gridToggle" type="checkbox" /> Axes</label>
+      <label><input id="unlitToggle" type="checkbox" /> Unlit</label>
+    </div>
+
+    <div class="row">
+      <label>Key light</label>
+      <label class="small">Az</label><input id="azimuth" type="number" step="1" value="35" style="width:70px">
+      <label class="small">El</label><input id="elevation" type="number" step="1" value="35" style="width:70px">
+      <label class="small">Dist</label><input id="lightDist" type="number" step="1" value="150" style="width:80px">
+      <label><input id="lightInf" type="checkbox" checked /> Infinite</label>
+      <label><input id="lightSpin" type="checkbox" /> Spin</label>
+      <button id="updateLight">Update</button>
+    </div>
+
+    <div class="row">
+      <label>Color space</label>
+      <select id="colorMode">
+        <option value="hsv" selected>HSV (X,Y,Z)</option>
+        <option value="rgb">RGB (X,Y,Z)</option>
+      </select>
+    </div>
+
+    <div class="row">
+      <strong class="small">Selection</strong>
+      <button id="selectNone">None</button>
+      <button id="selectAll">All</button>
+      <button id="invertSel">Invert</button>
+      <label>Pick color</label><input type="color" id="pickColor" value="#ff0000" />
+      <label class="small">Tol</label><input id="pickTol" type="number" step="0.01" min="0" max="1" value="0.15" style="width:70px" />
+      <button id="selectByColor">Select by color</button>
+      <span class="small">Tip: Alt-click a block to select its color.</span>
+    </div>
+
+    <div class="row">
+      <strong class="small">Paint</strong>
+      <select id="paintMode">
+        <option value="solid" selected>Solid</option>
+        <option value="linear">Linear gradient</option>
+        <option value="radial">Radial gradient (spherical)</option>
+        <option value="cyl">Cylindrical radial</option>
+        <option value="gnoise">Gradient + noise</option>
+        <option value="perlin">Perlin noise</option>
+        <option value="image">Image map</option>
+      </select>
+      <label>A</label><input type="color" id="colA" value="#ff0000" />
+      <label>B</label><input type="color" id="colB" value="#00ff00" />
+      <label class="small">Axis</label>
+      <select id="axis">
+        <option value="x" selected>X</option>
+        <option value="y">Y</option>
+        <option value="z">Z</option>
+      </select>
+      <label class="small">Scale</label><input id="noiseScale" type="number" step="0.1" value="2.0" style="width:80px" />
+      <label class="small">Oct</label><input id="noiseOct" type="number" step="1" value="4" style="width:70px" />
+      <label class="small">Amt</label><input id="noiseAmt" type="number" step="0.05" value="0.35" style="width:80px" />
+      <button id="noiseReroll" title="Reroll noise seed">Reroll</button>
+      <label class="small">Plane</label>
+      <select id="imgPlane">
+        <option value="xy" selected>XY</option>
+        <option value="xz">XZ</option>
+        <option value="yz">YZ</option>
+      </select>
+      <input type="file" id="imgInput" accept="image/*" />
+      <button id="applyPaint">Apply to selection</button>
+    </div>
+
+    <div id="stats">Load a <code>grid.json</code> (SE2). Blocks: 0</div>
+  </div>
+  <div id="dropzone">Drop <strong>grid.json</strong> here</div>
+
+  <script type="module" src="./src/viewer.js"></script>
+</body>
+</html>
