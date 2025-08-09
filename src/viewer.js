@@ -7,7 +7,6 @@ const fileInput = document.getElementById('fileInput');
 const sizeInput = document.getElementById('sizeInput');
 const autosizeToggle = document.getElementById('autosizeToggle');
 const shadowsToggle = document.getElementById('shadowsToggle');
-const colorMode = document.getElementById('colorMode');
 const statsEl   = document.getElementById('stats');
 const fitBtn    = document.getElementById('fitBtn');
 const resetBtn  = document.getElementById('resetBtn');
@@ -412,7 +411,6 @@ window.addEventListener('drop', (e) => { e.preventDefault(); dropzone.style.disp
 // Controls
 sizeInput.addEventListener('change', rebuild);
 autosizeToggle.addEventListener('change', rebuild);
-colorMode.addEventListener('change', () => { handleJSON(workingJSON || buildFromCurrent()); });
 starsToggle.addEventListener('change', () => { if (stars) stars.visible = starsToggle.checked; });
 gridToggle.addEventListener('change', () => { axes.visible = gridToggle.checked; });
 unlitToggle.addEventListener('change', () => { rebuild(); setShadowsEnabled(shadowsToggle.checked); });
@@ -662,32 +660,19 @@ animate();
 // Resize
 window.addEventListener('resize', () => { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); });
 
-// Rebuild current view into JSON (for colorMode toggle w/o workingJSON)
-function buildFromCurrent(){
-  const children=[]; for(let i=0;i<srcPositions.length;i++){ const p=srcPositions[i]; const sRGB=srcColors[i]?.clone().convertLinearToSRGB(); const [h,s,v]= sRGB ? rgbToHsv(sRGB.r,sRGB.g,sRGB.b) : [0,0,1]; children.push({"Value":{"ObjectBuilders":[
-    {"Value":{"$Type":"Sandbox.ChildTransformComponentObjectBuilder","TransformWithEulerHint":{"Transform":{"Position":{"X":p.x,"Y":p.y,"Z":p.z}}}}},
-    {"Value":{"$Type":"Sandbox.CubeBlockObjectBuilder","Color":{"Values":{"X":h,"Y":s,"Z":v,"W":1}}}}
-  ]}}); }
-  return {"$Value":{"Builders":[{"ObjectBuilders":[{"Value":{"$Type":"Sandbox.HierarchyComponentObjectBuilder","Children":children}}]}]}};
-}
-
-// Convert JSON color -> linear THREE.Color
+// Convert JSON color -> linear THREE.Color (HSV only)
 function colorFromValues(vals) {
-  let x = vals?.X ?? 1, y = vals?.Y ?? 1, z = vals?.Z ?? 1;
-  let r,g,b;
-  if (colorMode.value === 'hsv') {
-    let h = x, s = y, v = z;
-    if (h > 3) h = h / 360;
-    if (h > 1 && h <= 3) h = h / 255;
-    if (s > 1) s = s / 255;
-    if (v > 1) v = v / 255;
-    h = ((h % 1) + 1) % 1; s = THREE.MathUtils.clamp(s,0,1); v = THREE.MathUtils.clamp(v,0,1);
-    [r,g,b] = hsvToRgb(h, s, v);
-  } else {
-    r = x; g = y; b = z;
-    if (r > 1 || g > 1 || b > 1) { r/=255; g/=255; b/=255; }
-    r = THREE.MathUtils.clamp(r,0,1); g = THREE.MathUtils.clamp(g,0,1); b = THREE.MathUtils.clamp(b,0,1);
-  }
+  let h = vals?.X ?? 0;
+  let s = vals?.Y ?? 0;
+  let v = vals?.Z ?? 0;
+  if (h > 3) h = h / 360;
+  else if (h > 1) h = h / 255;
+  if (s > 1) s = s / 255;
+  if (v > 1) v = v / 255;
+  h = ((h % 1) + 1) % 1;
+  s = THREE.MathUtils.clamp(s, 0, 1);
+  v = THREE.MathUtils.clamp(v, 0, 1);
+  const [r, g, b] = hsvToRgb(h, s, v);
   const c = new THREE.Color(r, g, b);
   c.convertSRGBToLinear();
   return c;
